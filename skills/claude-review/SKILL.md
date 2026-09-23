@@ -17,4 +17,6 @@ Paid credits may be charged; subscription authentication is not a zero-cost guar
 
 The reviewer uses the official CLI with normal customizations disabled and only Read/Grep/Glob. Administrator policy remains trusted. This is static review: no tests, commands, edits, or publication. Repository-root confinement is Claude's restricted-mode policy, not a separate OS sandbox. Inputs/results appear in the OMP conversation and are processed by Anthropic; do not claim zero retention.
 
+For installation, updates, or recovery, read the [operator guide](../../README.md#installation-and-setup). It explains plugin linking, local state, verification, and known limits.
+
 For setup or upgrade failures, inspect the repository's `configure`, `check`, and `link` scripts. `configure` changes user-scoped bridge configuration; `link` changes the OMP installation. Perform those mutations only when authorized. After a CLI upgrade, investigate compatibility before re-pinning the version; do not reconfigure merely to silence the version gate. Keep installation linked to this package rather than copying tool files into another tree.
