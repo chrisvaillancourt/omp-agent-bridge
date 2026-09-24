@@ -24,7 +24,7 @@ Delegate a scoped task from OMP to the official Claude Code CLI, then inspect it
 
 Do not retrieve a token or supply an API key to configure this bridge. Sign in or change accounts through the official CLI first.
 
-From this local checkout, review the side effects and run:
+From a checkout of [the source repository](https://github.com/chrisvaillancourt/omp-agent-bridge), review the side effects and run:
 
 ```sh
 sfw bun install --frozen-lockfile
@@ -131,7 +131,7 @@ Start a fresh session or reload plugins after the move. A running OMP session ca
 | `permission_denied` / `model_mismatch` / `invalid_result` / `delegate_failed` | Inspect policy, actual changes, compatibility, and usage before considering a newly approved attempt. |
 | `timeout` / `cancelled` / `output_limit` | Inspect partial workspace changes and usage. Narrow the task if appropriate; any attempt requires new approval. |
 
-For an upgrade, authorize dependency/config changes, inspect changed OMP/Claude behavior, install locked dependencies, run offline checks, and re-pin only after a compatibility decision. Restart OMP to load updates through the plugin link. Do not change Git authentication/signing or billing settings merely to pass a check or commit. This checkout has no Git remote yet; linking is local and does not publish it.
+For an upgrade, authorize dependency/config changes, inspect changed OMP/Claude behavior, install locked dependencies, run offline checks, and re-pin only after a compatibility decision. Restart OMP to load updates through the plugin link. Do not change Git authentication/signing or billing settings merely to pass a check or commit. Plugin linking is local and does not publish your checkout.
 
 ## Verification record
 
@@ -145,7 +145,7 @@ The earlier **review-only** bridge was checked on 2026-09-23 with OMP 18.2.11, C
 - A fresh OMP runtime registered and activated `claude_task`, exposed its generated request schema, and no longer exposed `claude_review`. `omp read skill://claude-bridge` resolved the bundled workflow.
 - The standalone CLI rejected a headless task. In an actual terminal, `--prompt-file`, mode/model/deadline presentation, and declining `RUN ONCE` were exercised; the result was `approval_required` with no inference dispatch.
 
-Repeat local checks with `bun run verify` (`typecheck`, tests, then `check`). `check` requires the matching local configuration/account/version on macOS. No new live inference was run: real task completion, work-mode edits, and alternative model availability remain unverified. A live smoke needs separate approval and should verify the answer and actual workspace effects, then compare `/usage`. An offline check creates ordinary local state; it does not imply zero filesystem effects.
+Repeat local checks with `bun run verify` (`typecheck`, tests, then `check`). `check` requires the matching local configuration/account/version on macOS. The refactor checks above sent no live inference; the later live review is recorded below. Each live invocation needs separate approval; verify its answer and actual workspace effects, then compare `/usage`. An offline check creates ordinary local state; it does not imply zero filesystem effects.
 
 Previously unverified cases include live quota exhaustion, account-switch races, parent-crash/force-kill containment, hostile repository escape resistance, other operating systems, every OMP UI transport, and provider-side cancellation.
 
@@ -158,6 +158,14 @@ Previously unverified cases include live quota exhaustion, account-switch races,
 - A deliberately invalid configuration fingerprint exercised creation/removal of `task.lock` and was rejected before preflight/inference. Temporary probes were removed.
 - No Git remote was configured, and lookup/list/search found no accessible bridge repository under the expected GitHub owner. No repository was created, renamed remotely, or pushed. No live inference was run.
 
+### Live task review and release checks
+
+- One freshly approved `claude_task` invocation completed in `work` mode using `claude-sonnet-5` and pinned CLI 2.1.281. Claude reviewed the implementation and reported local shell execution, temporary experiment creation, and cleanup; the bridge returned a validated answer and limitations. No follow-up inference was run.
+- The review identified a deadline hang when a detached descendant retained output pipes. A regression reproduced the failure before the fix. Failed subprocesses now destroy their pipes; successful subprocesses still drain output. The parent's final supervisor escalation now uses `SIGKILL`.
+- After the fix, `bun run verify` passed TypeScript checking, nine behavioral tests, and both credential-free, network-denied compatibility profiles.
+- Isolated executable fixtures exercised the actual bridge and worker: inherited-pipe timeout returned failure and released the lock, a subsequent invocation succeeded, and a deliberately frozen supervisor was forcibly terminated by the parent watchdog. The fixture's surviving child and stale lock were cleaned up explicitly; forced termination is not a containment guarantee. A separate output probe preserved all 336,000 bytes of buffered UTF-8 output.
+- Pre-publication checks scanned all reachable historical Git file versions and commit metadata with `detect-secrets` 1.5.0, with credential verification over the network disabled. Targeted checks also found no private filesystem paths, private-note references, or organization UUID literals. No sensitive information was identified; scanning is not proof of absence. Local configuration, credentials, dependencies, and session data are not tracked.
+- The live review validates generic task completion and work-mode experiments, not a full implementation task or live read-only enforcement. Alternative models, usage attribution, and billing balances were not verified. The post-review fix was verified locally, not by a second Claude invocation.
 
 ## References
 
