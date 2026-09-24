@@ -133,6 +133,14 @@ These are bridge limits, not promises about model availability, provider context
 
 JavaScript string length counts UTF-16 code units: some characters, including many emoji, count as two units. Byte limits measure encoded data and are separate from string-length limits.
 
+### Your normal Claude skills are not loaded
+
+Delegated Claude sessions do **not** load the skills or customizations from your normal Claude setup. `--safe-mode` disables ordinary skills, `CLAUDE.md` instructions, plugins, hooks, and custom agents; `--disable-slash-commands` disables skill invocation; `--setting-sources ""` excludes normal user, project, and local settings sources. Organization-managed policy still applies.
+
+The bundled `claude-bridge` skill runs in **OMP**, not inside the delegated Claude session. Supply relevant instructions and context in the task prompt. Work mode's `auto` permission setting does not enable personal skills or settings.
+
+This isolation is intentional for now. Loading existing Claude skills is a deferred design decision, not a supported configuration option; no launch behavior has changed.
+
 ### Non-interactive execution and session persistence
 
 Task invocation authorizes immediate bridge dispatch, including possible paid-credit charges. There is no bridge spending gate, per-invocation confirmation, or `--yes` flag. Claude's `auto` permission decisions and OMP's host tool-access policy remain separate controls; unattended use does not bypass either.
