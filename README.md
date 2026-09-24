@@ -52,12 +52,14 @@ Start OMP in the directory Claude should work in. The bridge canonicalizes that 
 | --- | --- |
 | `prompt` | Task and evidence, 1–32,000 characters. |
 | `mode` | Required: `work` permits implementation and experiments, including experiments during a review; `read-only` deliberately limits a task to static reading. |
-| `model` | Optional exact `claude-…` model ID containing a numeric version; defaults to the configured model (`claude-sonnet-5` by default). No aliases. |
+| `model` | Optional exact `claude-…` model ID containing a numeric version; defaults to the configured model (`claude-opus-5-5` for new configurations). No aliases. |
 | `timeoutSeconds` | Optional integer execution deadline, 1–1,800 seconds; defaults to 600. The supervisor allows another 60 seconds for preflight and lifecycle overhead, with parent watchdog actions 5/10 seconds later. |
 
 There is no caller-supplied executable, credential, environment, tool list, argv, or cwd field. The selected model, directory, mode, deadline, billing warning, and authority are displayed before approval. The interactive confirmation authorizes **one** invocation; declining sends no inference request. OMP's general `exec` tool approval classification and the bridge's own confirmation are separate.
 
-For example, ask OMP to delegate with `{"prompt":"Investigate the parser edge case; use a temporary experiment to validate your conclusion.","mode":"work","model":"claude-opus-5-5"}`. Model availability is determined by your Claude account, not this plugin. The default remains `claude-sonnet-5`; another exact model ID is selected per invocation and displayed for approval. Fable models can require paid credits even before other included allowance is exhausted; Claude's noninteractive mode does not ask for its own additional consent.
+For example, ask OMP to delegate with `{"prompt":"Investigate the parser edge case; use a temporary experiment to validate your conclusion.","mode":"work","model":"claude-opus-5-5"}`. Model availability is determined by your Claude account, not this plugin. New configurations default to `claude-opus-5-5`; another exact model ID is selected per invocation and displayed for approval. Existing configurations retain their stored model until deliberately updated. Model-specific paid credits may be charged even before included allowance is exhausted; Claude's noninteractive mode does not ask for its own additional consent.
+
+The Opus 5.5 default passed TypeScript checking, nine behavioral tests, and both credential-free, network-denied compatibility profiles. An offline approval-boundary check confirmed that omitted models display `claude-opus-5-5` in both modes and explicit overrides remain supported. These checks sent no inference and do not verify live Opus availability or billing.
 
 **Work authority:** Claude may run arbitrary shell programs, edit or delete files, create temporary experiments, and access the network with the OS user's authority. The bridge disables normal Claude customizations, MCP/Chrome/slash commands, and session persistence, but this is not an OS sandbox or filesystem containment. A failure, timeout, or cancellation does not roll back edits; inspect actual changes before trusting the answer, retrying, or committing. The bridge does not automatically publish or commit work.
 
@@ -74,7 +76,7 @@ From the intended working directory in an interactive terminal:
 ```sh
 bun /absolute/path/to/omp-agent-bridge/src/cli.ts task \
   'Inspect the failing behavior and implement the scoped fix.' --mode work \
-  --model claude-sonnet-5 --timeout 600
+  --model claude-opus-5-5 --timeout 600
 ```
 
 For a longer or sensitive prompt, use `--prompt-file /path/to/prompt.txt` instead of the positional prompt. Use `--mode read-only` for consultation. Both stdin and stdout must be terminals; type `RUN ONCE` at the approval prompt. A positional prompt appears in the operator CLI process arguments; the prompt file avoids that exposure. The bridge passes the task to Claude over stdin, not Claude's argv.
@@ -105,7 +107,41 @@ Git-diff capture and a findings-only schema made the bridge unusable for general
 | [src/extension.ts](src/extension.ts), [src/cli.ts](src/cli.ts) | OMP and interactive operator adapters |
 | [skills/claude-bridge/SKILL.md](skills/claude-bridge/SKILL.md) | Conditional task and review workflow |
 
-The wire request is capped at 200,000 bytes; Claude output and supervisor output are each capped at 1,000,000 bytes including stderr. Answers are limited to 64,000 characters with up to 20 limitations of 4,000 characters each. Limits bound execution/output, not monetary spend.
+## Hard restrictions and size limits
+
+These are bridge limits, not promises about model availability, provider context windows, or spending. The bridge rejects invalid requests and results rather than silently truncating them.
+
+| Area | Enforced restriction or limit |
+| --- | --- |
+| Platform | macOS only; configuration and preflight reject other platforms. |
+| Account | First-party Claude Team subscription login through the official CLI only. Account organization/profile and the exact configured CLI version must still match. |
+| CLI version | Configuration accepts Claude Code 2.1.281 or newer in the 2.1 series, then pins the exact version. A new version requires a deliberate compatibility check and configuration update. |
+| Approval | Fresh interactive confirmation for each invocation, including retries. The OMP adapter refuses when `ctx.hasUI` is false; the standalone command requires terminal input and output. No unattended approval option. |
+| Permissions | Read-only explicitly uses `dontAsk`, restricted mode, and Read/Grep/Glob only. Work explicitly uses `bypassPermissions` and default built-in tools. Neither mode inherits a personal `auto` permission setting. Administrator policy still applies. |
+| Customizations | Ordinary Claude customizations, hooks, MCP connections, Chrome integration, slash commands, and session persistence are disabled for the launched CLI. Work-mode shell authority is not a sandbox and can reach other programs and files. |
+| Parallel requests | One active task per local bridge configuration. No bridge retries or automatic task queue. Claude Code may retry internally within an invocation. |
+| Conversation continuity | One fresh conversation per invocation. No session ID, resume, or continue field; callers must supply follow-up context in a new task. |
+| Request fields | Only `prompt`, required `mode`, optional `model`, and optional `timeoutSeconds`. No caller-provided executable, environment, tool list, CLI arguments, or working-directory field. OMP supplies its working directory; the standalone command uses its current directory. |
+| Working directory | Must exist and be a directory; symlinks are resolved. No Git repository, base ref, or clean working tree is required. |
+| Prompt | 1–32,000 JavaScript string-length units after trimming surrounding whitespace. |
+| Standalone prompt file | At most 128,000 bytes before reading; the prompt length limit still applies. |
+| Model ID | At most 120 JavaScript string-length units; must match the versioned `claude-…` ID pattern. No floating aliases. New configurations default to `claude-opus-5-5`. The account must support the requested model. |
+| Execution deadline | Integer from 1 to 1,800 seconds; default 600. The worker allows another 60 seconds for preflight/lifecycle overhead; the parent closes its lease 5 seconds later and force-kills the worker 10 seconds later. Initial approval/preflight time is separate. |
+| Serialized worker request | At most 200,000 bytes. |
+| Captured execution output | Claude output and supervisor output are each capped at 1,000,000 bytes, combining standard output and diagnostic output. Exceeding a cap fails the task. |
+| Answer | 1–64,000 JavaScript string-length units. |
+| Limitations | At most 20 entries, each at most 4,000 JavaScript string-length units. |
+| Successful result | A complete successful terminal result, no permission denials, and model usage matching the selected ID or that ID with an eight-digit date suffix. Otherwise the answer is rejected. |
+
+JavaScript string length counts UTF-16 code units: some characters, including many emoji, count as two units. Byte limits measure encoded data and are separate from string-length limits.
+
+### Why approval and session persistence work this way
+
+Per-invocation approval is a bridge safety policy, not a claim that Claude Code inherently requires an interactive caller. It ties consent to the displayed task, model, authority, and possible paid-credit charges. A previous approval, Claude's own permission mode, or OMP's general tool approval does not replace it. Consequently, an OMP session without an approval interface cannot use this bridge for delegation.
+
+`--no-session-persistence` keeps the current bridge stateless and avoids saving a separate resumable Claude transcript. It does not prevent OMP or Anthropic retention. This trades convenient follow-up conversations for explicit, self-contained task context.
+
+Resuming a conversation could be useful, but removing that flag alone would not provide a usable resume feature: the request/result contract currently has no session identifier or resume option. Supporting follow-ups would require explicit session selection and handling of stored context, account/profile identity, permissions, and fresh approval. Session persistence and permission mode are separate choices; neither removes the approval requirement.
 
 ## State and recovery
 
