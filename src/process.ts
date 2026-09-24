@@ -24,7 +24,13 @@ export async function run(
       catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) child.kill("SIGKILL"); }
     }
   };
-  const stop = (error: BridgeError) => { failure ??= error; kill(); };
+  const stop = (error: BridgeError) => {
+    failure ??= error;
+    kill();
+    // A detached descendant can retain pipe fds after the child group is dead.
+    // Failed commands need no further output; successful commands still drain.
+    child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+  };
   const abort = () => stop(new BridgeError("cancelled", "Task cancelled."));
   const timer = setTimeout(() => stop(new BridgeError("timeout", "Task exceeded its wall-clock deadline.")), options.timeoutMs ?? 15_000);
   const collect = (target: Buffer[]) => (chunk: Buffer) => {

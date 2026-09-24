@@ -88,6 +88,26 @@ test("timeout kills descendants, not just the process-group leader", async () =>
   expect(alive).toBe(false);
 });
 
+test("a deadline settles even when a detached descendant retains the output pipes", async () => {
+  // Real process exit and inherited OS pipes cannot be advanced with fake timers.
+  const dir = await mkdtemp(join(tmpdir(), "bridge-pipes-")); temporary.push(dir);
+  const marker = join(dir, "detached.pid");
+  const source = `import {spawn} from 'node:child_process'; import {writeFileSync} from 'node:fs'; const c=spawn(process.execPath,['-e','setTimeout(()=>{},10000)'],{detached:true,stdio:'inherit'}); writeFileSync(${JSON.stringify(marker)},String(c.pid)); setInterval(()=>{},1000);`;
+  const pending = run(process.execPath, ["-e", source], { cwd: dir, env: childEnvironment(), timeoutMs: 500 })
+    .then(() => ({ code: "unexpected_success" }), (error: unknown) => error);
+  let watchdog: NodeJS.Timeout | undefined;
+  try {
+    const stalled = new Promise((resolve) => { watchdog = setTimeout(() => resolve({ code: "stalled" }), 2500); });
+    expect(await Promise.race([pending, stalled])).toMatchObject({ code: "timeout" });
+  } finally {
+    clearTimeout(watchdog);
+    const pid = Number(await readFile(marker, "utf8"));
+    try { process.kill(pid, "SIGKILL"); }
+    catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error; }
+    await pending;
+  }
+});
+
 test("cancellation and output overflow cannot return successful partial output", async () => {
   const controller = new AbortController();
   const pending = run(process.execPath, ["-e", "setInterval(()=>{},1000)"], { cwd: tmpdir(), env: childEnvironment(), signal: controller.signal });

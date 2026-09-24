@@ -40,7 +40,7 @@ export async function delegate(cwd: string, input: unknown, confirm: (warning: s
     const cancel = () => { failure ??= new BridgeError("cancelled", "Task cancelled."); worker.stdin.end(); };
     const supervisorMs = task.request.timeoutSeconds * 1000 + 60_000;
     const timeout = setTimeout(() => { failure = new BridgeError("timeout", "Task supervisor exceeded its deadline."); worker.stdin.end(); }, supervisorMs + 5_000);
-    const forceStop = setTimeout(() => worker.kill("SIGTERM"), supervisorMs + 10_000);
+    const forceStop = setTimeout(() => worker.kill("SIGKILL"), supervisorMs + 10_000);
     worker.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 1_000_000) { failure = new BridgeError("output_limit", "Task result exceeded the limit."); worker.stdin.end(); }
