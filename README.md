@@ -1,6 +1,6 @@
 # OMP Agent Bridge
 
-Delegate a scoped task from OMP to the official Claude Code CLI, then inspect its answer and any workspace changes in OMP. The bridge is an OMP plugin with a custom `claude_task` tool and the bundled `claude-bridge` skill. It is not an OMP model provider, Claude Agent SDK application, MCP server, or ACP adapter. The public display name is **OMP Agent Bridge**; the local package, plugin link, and configuration path remain `omp-review-bridge` for now.
+Delegate a scoped task from OMP to the official Claude Code CLI, then inspect its answer and any workspace changes in OMP. The bridge is an OMP plugin with a custom `claude_task` tool and the bundled `claude-bridge` skill. It is not an OMP model provider, Claude Agent SDK application, MCP server, or ACP adapter. The package and plugin name is `omp-agent-bridge`.
 
 ```text
 /skill:claude-bridge or a delegation request in OMP
@@ -17,7 +17,7 @@ Delegate a scoped task from OMP to the official Claude Code CLI, then inspect it
 ### Prerequisites
 
 - **macOS:** configuration rejects other platforms. Offline compatibility checking uses `sandbox-exec`; lifecycle handling uses POSIX process groups.
-- **Bun 1.3.14 or newer**. OMP integration was previously verified with **18.2.11**.
+- **Bun 1.3.14 or newer**. OMP integration was initially verified with **18.2.11**; renamed-plugin discovery was also verified with **18.3.0**.
 - **Official Claude Code CLI:** the earlier review bridge was verified with **2.1.281**. Its 2.1-series gate starts there and pins the exact configured version; a later version is not automatically verified for this task bridge.
 - A working **Claude Team login** established in Claude Code's own flow. Other account types are rejected by the configured account metadata checks.
 - Socket Firewall (`sfw`) for the dependency-install command below, which retains dependency screening.
@@ -42,7 +42,7 @@ bun run link
 
 For a deliberately selected, already logged-in Claude profile, use `bun run configure /absolute/path/to/claude-profile`. Omitting the profile selects the default Claude profile, not an inherited `CLAUDE_CONFIG_DIR` override. Configuration does not log you in, copy credentials, change billing settings, or prove paid credits are disabled. An initial dependency install blocked transitive `onnxruntime-node` and `protobufjs` postinstall scripts; the installed OMP CLI and earlier checks worked without enabling them. Do not enable lifecycle scripts just to eliminate that notice.
 
-The manifest loads `./src/extension.ts`; `omp plugin link .` links this package into OMP (under the default layout, `~/.omp/plugins/node_modules/omp-review-bridge → this checkout`). The bundled skill is discovered at `skills/claude-bridge/SKILL.md`, not copied into `~/.omp/agent/skills/`. XDG storage can move OMP's data root. Verify discovery with `omp read skill://claude-bridge`. Start a **fresh OMP session** after linking or changing registration/skill metadata: the link exposes file edits, but a running session may retain code or instructions. Moving the checkout breaks the link; relink at its new location and restart OMP. To disable without removing the checkout or account pin, run `omp plugin disable omp-review-bridge`.
+The manifest loads `./src/extension.ts`; `omp plugin link .` links this package into OMP (under the default layout, `~/.omp/plugins/node_modules/omp-agent-bridge → this checkout`). The bundled skill is discovered at `skills/claude-bridge/SKILL.md`, not copied into `~/.omp/agent/skills/`. XDG storage can move OMP's data root. Verify discovery with `omp read skill://claude-bridge`. Start a **fresh OMP session** after linking or changing registration/skill metadata: the link exposes file edits, but a running session may retain code or instructions. Moving the checkout breaks the link; relink at its new location and restart OMP. To disable without removing the checkout or account pin, run `omp plugin disable omp-agent-bridge`.
 
 ## Delegating a task
 
@@ -72,7 +72,7 @@ A successful tool response is `{status: "succeeded", cwd, model, mode, answer, l
 From the intended working directory in an interactive terminal:
 
 ```sh
-bun /absolute/path/to/omp-review-bridge/src/cli.ts task \
+bun /absolute/path/to/omp-agent-bridge/src/cli.ts task \
   'Inspect the failing behavior and implement the scoped fix.' --mode work \
   --model claude-sonnet-5 --timeout 600
 ```
@@ -109,7 +109,13 @@ The wire request is capped at 200,000 bytes; Claude output and supervisor output
 
 ## State and recovery
 
-Configuration remains at `~/.config/omp-review-bridge/config.json` (mode `0600` under a `0700` directory), containing executable/version, profile selection, organization ID, and model metadata—not credentials. Do not publish it. `review.lock` remains beside the config for installed-version mutual exclusion; the name is historical. It has no PID and cannot establish liveness itself. OMP's plugin enablement/link state is separate, and bridge configuration is not scoped to an OMP profile.
+Configuration is stored at `~/.config/omp-agent-bridge/config.json` (mode `0600` under a `0700` directory), containing executable/version, profile selection, organization ID, and model metadata—not credentials. Do not publish it. `task.lock` is created beside the config for single-flight execution. It has no PID and cannot establish liveness itself. OMP's plugin enablement/link state is separate, and bridge configuration is not scoped to an OMP profile.
+
+### Migrating the earlier installation
+
+This is a clean rename, not an old-name fallback. Before migrating another checkout, stop bridge tasks and confirm the old lock is absent; then uninstall the old `omp-review-bridge` plugin, rename the checkout, and move its configuration directory to `~/.config/omp-agent-bridge` without changing the configuration bytes. Stop if the destination already exists rather than merging or overwriting it. Link this package with `omp plugin link .` and run `bun run verify`. New executions use `task.lock`; never move an active lock to the new name.
+
+Start a fresh session or reload plugins after the move. A running OMP session can retain old tool/skill paths, including expanding `skill://` tokens in shell commands to the removed location. Do not restore old-path symlinks to mask that stale session state.
 
 | Code or symptom | Response |
 | --- | --- |
@@ -142,6 +148,16 @@ The earlier **review-only** bridge was checked on 2026-09-23 with OMP 18.2.11, C
 Repeat local checks with `bun run verify` (`typecheck`, tests, then `check`). `check` requires the matching local configuration/account/version on macOS. No new live inference was run: real task completion, work-mode edits, and alternative model availability remain unverified. A live smoke needs separate approval and should verify the answer and actual workspace effects, then compare `/usage`. An offline check creates ordinary local state; it does not imply zero filesystem effects.
 
 Previously unverified cases include live quota exhaustion, account-switch races, parent-crash/force-kill containment, hostile repository escape resistance, other operating systems, every OMP UI transport, and provider-side cancellation.
+
+### Rename verification — 2026-09-24
+
+- Renamed the checkout, package/lockfile identity, plugin registration, configuration directory, and lock to `omp-agent-bridge` / `task.lock`.
+- Preserved the existing configuration byte-for-byte with its `0600` file and `0700` directory modes; no account, credential, billing, dependency, or version-pin changes.
+- `bun run verify` passed after the move: TypeScript, eight tests, and both offline Claude profiles against pinned CLI 2.1.281.
+- A fresh OMP 18.3.0 runtime loaded and activated `claude_task` from the new plugin path without the old tool. Direct fresh-process skill lookup loaded the bundled workflow from the renamed installation.
+- A deliberately invalid configuration fingerprint exercised creation/removal of `task.lock` and was rejected before preflight/inference. Temporary probes were removed.
+- No Git remote was configured, and lookup/list/search found no accessible bridge repository under the expected GitHub owner. No repository was created, renamed remotely, or pushed. No live inference was run.
+
 
 ## References
 

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "omp-review-bridge",
+      "name": "omp-agent-bridge",
       "dependencies": {
         "zod": "^4.6.5",
       },

@@ -59,7 +59,7 @@ task PROMPT --mode work|read-only [--model ID] [--timeout SECONDS]
 task --prompt-file PATH --mode work|read-only [--model ID] [--timeout SECONDS]
                      Delegate from any directory; requires terminal approval.
 
-Install in OMP: omp plugin link /absolute/path/to/omp-review-bridge
+Install in OMP: omp plugin link /absolute/path/to/omp-agent-bridge
 Start a fresh OMP session and invoke /skill:claude-bridge.
 
 Work mode grants shell/edit/network authority as your OS user, not sandboxed access.

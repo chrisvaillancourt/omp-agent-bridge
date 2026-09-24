@@ -1,5 +1,5 @@
 {
-  "name": "omp-review-bridge",
+  "name": "omp-agent-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",

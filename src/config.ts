@@ -7,7 +7,7 @@ import { BridgeError, run } from "./process.ts";
 import { modelSchema } from "./request.ts";
 
 export const DEFAULT_MODEL = "claude-sonnet-5";
-export const CONFIG_PATH = join(homedir(), ".config", "omp-review-bridge", "config.json");
+export const CONFIG_PATH = join(homedir(), ".config", "omp-agent-bridge", "config.json");
 const configSchema = z.object({
   version: z.literal(1), claude: z.string().refine(isAbsolute),
   claudeVersion: z.string().regex(/^2\.1\.\d+$/), profile: z.string().refine(isAbsolute),

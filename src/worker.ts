@@ -22,9 +22,7 @@ let bytes = 0;
 let dispatched = false;
 
 async function execute(line: string) {
-  // Retain this lock name until installation identity is migrated, so an older
-  // loaded extension cannot run concurrently with the new bridge.
-  const lock = join(dirname(CONFIG_PATH), "review.lock");
+  const lock = join(dirname(CONFIG_PATH), "task.lock");
   let owned = false;
   try {
     const payload = inputSchema.parse(JSON.parse(line));
