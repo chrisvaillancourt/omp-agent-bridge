@@ -32,10 +32,10 @@ async function execute(line: string) {
     try { const handle = await open(lock, "wx", 0o600); await handle.close(); owned = true; }
     catch { throw new BridgeError("busy", "Another task owns the bridge lock. If a supervisor was force-killed, confirm no task remains before removing the stale lock."); }
     const config = await loadConfig();
-    if (configDigest(config) !== payload.configDigest) throw new BridgeError("config_changed", "Bridge configuration changed after approval. Request fresh approval.");
+    if (configDigest(config) !== payload.configDigest) throw new BridgeError("config_changed", "Bridge configuration changed during dispatch. Inspect the configuration before another invocation.");
     await preflight(config);
     const task = await prepareTask(payload.cwd, payload.request, config.model);
-    if (task.cwd !== payload.cwd) throw new BridgeError("invalid_workspace", "Working directory changed after approval. Request fresh approval.");
+    if (task.cwd !== payload.cwd) throw new BridgeError("invalid_workspace", "Working directory changed during dispatch. Inspect the workspace before another invocation.");
     const prompt = [
       "Complete the delegated task below. Return the requested answer with evidence and verification results appropriate to the task, and disclose incomplete work in limitations. Distinguish observations from assumptions.",
       task.request.mode === "work"

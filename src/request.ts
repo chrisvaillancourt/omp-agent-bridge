@@ -7,7 +7,7 @@ export const modelSchema = z.string().max(120).regex(/^claude-[a-z][a-z0-9]*(?:-
 export const requestSchema = z.object({
   prompt: z.string().trim().min(1).max(32_000).describe("Task, requirements, context, and expected verification."),
   mode: z.enum(["work", "read-only"]).describe("work permits shell commands, edits, and experiments as your OS user; read-only permits Read/Grep/Glob only."),
-  model: modelSchema.optional().describe("Exact versioned Claude model ID; omitted uses the configured default. Shown for approval."),
+  model: modelSchema.optional().describe("Exact versioned Claude model ID; omitted uses the configured default."),
   timeoutSeconds: z.number().int().min(1).max(1800).default(600).describe("Claude execution deadline, 1–1800 seconds; not a spending cap."),
 }).strict();
 export const resolvedRequestSchema = requestSchema.extend({ model: modelSchema });

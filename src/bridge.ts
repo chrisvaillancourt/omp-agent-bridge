@@ -11,22 +11,13 @@ const responseSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("failed"), code: z.string(), message: z.string() }).strict(),
 ]);
 export type Result = z.infer<typeof responseSchema>;
-const BILLING_WARNING = "This task uses your Claude Team login. Paid usage credits may be charged, including model-specific charges before included allowance is exhausted. The bridge cannot enforce included-only usage or read the paid-credit balance. Approve exactly one invocation, with no bridge retries. Check /usage afterward.";
-
-export async function delegate(cwd: string, input: unknown, confirm: (warning: string) => Promise<boolean>, signal?: AbortSignal): Promise<Result> {
+export async function delegate(cwd: string, input: unknown, signal?: AbortSignal): Promise<Result> {
   let started = false;
   try {
     const parsed = requestSchema.parse(input);
     const config = await loadConfig();
     const task = await prepareTask(cwd, parsed, config.model);
     await preflight(config);
-    if (signal?.aborted) throw new BridgeError("cancelled", "Task cancelled before approval.");
-    const authority = task.request.mode === "work"
-      ? "WORK: Claude can edit files, run commands, access the network, and create temporary experiments as your OS user, subject to Claude's auto permission mode and administrator policy. Actions requiring a permission prompt are denied; this is not a sandbox. Files outside this directory and other local credentials may be accessible to permitted commands. Failed/cancelled tasks can leave changes and external effects; there is no rollback."
-      : "READ-ONLY: Read/Grep/Glob only, with Claude restricted-mode file policy. No shell commands or edits; not an independent OS sandbox.";
-    if (!await confirm(`${BILLING_WARNING}\n\nDirectory: ${task.cwd}\nModel: ${task.request.model}\nExecution deadline: ${task.request.timeoutSeconds} seconds\n\n${authority}\n\nTask:\n${task.request.prompt}`)) {
-      throw new BridgeError("approval_required", "Task was not approved. No inference was sent.");
-    }
     if (signal?.aborted) throw new BridgeError("cancelled", "Task cancelled before dispatch.");
     const bun = Bun.which("bun");
     if (!bun) throw new BridgeError("runtime_missing", "Bun must be installed to supervise Claude independently of OMP.");

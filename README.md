@@ -5,12 +5,12 @@ Delegate a scoped task from OMP to the official Claude Code CLI, then inspect it
 ```text
 /skill:claude-bridge or a delegation request in OMP
     → claude_task(prompt, mode, optional model/deadline)
-    → fresh interactive approval for one invocation
+    → account/version checks, without a bridge confirmation prompt
     → supervisor and official claude -p using the user's own Team login
     → answer and limitations returned to OMP
 ```
 
-**Billing:** Team subscription authentication does not guarantee an invocation stays within included allowance. Paid usage credits may be charged; the bridge cannot read the balance or enforce zero additional spend. Approval is required for every invocation, including another attempt after a failure. Headless invocations are refused. Check Claude Code `/usage` around approved work if cost matters; a failed or cancelled invocation may have consumed usage, and reporting may lag.
+**Billing and unattended use:** Invoking a task starts execution without a bridge confirmation, in interactive and non-interactive sessions alike. Paid usage credits may be charged; the bridge cannot read the balance or enforce zero additional spend. Invoke it only for authorized tasks. OMP's own tool-access policy still applies. Check Claude Code `/usage` if cost matters; a failed or cancelled invocation may have consumed usage, and reporting may lag.
 
 ## Installation and setup
 
@@ -55,25 +55,21 @@ Start OMP in the directory Claude should work in. The bridge canonicalizes that 
 | `model` | Optional exact `claude-…` model ID containing a numeric version; defaults to the configured model (`claude-opus-5-5` for new configurations). No aliases. |
 | `timeoutSeconds` | Optional integer execution deadline, 1–1,800 seconds; defaults to 600. The supervisor allows another 60 seconds for preflight and lifecycle overhead, with parent watchdog actions 5/10 seconds later. |
 
-There is no caller-supplied executable, credential, environment, tool list, argv, or cwd field. The selected model, directory, mode, deadline, billing warning, and authority are displayed before approval. The interactive confirmation authorizes **one** invocation; declining sends no inference request. OMP's general `exec` tool approval classification and the bridge's own confirmation are separate.
+There is no caller-supplied executable, credential, environment, tool list, argv, or cwd field. The bridge validates the request and configured account before dispatch; it does not ask for separate confirmation or require an interactive UI. OMP's general tool-access policy still applies: `claude_task` remains classified as `exec` because it can run commands. Configure the OMP session to allow that tool when running unattended; the bridge does not override host denials or prompts.
 
-For example, ask OMP to delegate with `{"prompt":"Investigate the parser edge case; use a temporary experiment to validate your conclusion.","mode":"work","model":"claude-opus-5-5"}`. Model availability is determined by your Claude account, not this plugin. New configurations default to `claude-opus-5-5`; another exact model ID is selected per invocation and displayed for approval. Existing configurations retain their stored model until deliberately updated. Model-specific paid credits may be charged even before included allowance is exhausted; Claude's noninteractive mode does not ask for its own additional consent.
-
-The Opus 5.5 default passed TypeScript checking, nine behavioral tests, and both credential-free, network-denied compatibility profiles. An offline approval-boundary check confirmed that omitted models display `claude-opus-5-5` in both modes and explicit overrides remain supported. These checks sent no inference and do not verify live Opus availability or billing.
+For example, ask OMP to delegate with `{"prompt":"Investigate the parser edge case; use a temporary experiment to validate your conclusion.","mode":"work","model":"claude-opus-5-5"}`. Model availability is determined by your Claude account, not this plugin. New configurations default to `claude-opus-5-5`; another exact model ID can be selected per invocation. Existing configurations retain their stored model until deliberately updated. Model-specific paid credits may be charged even before included allowance is exhausted.
 
 **Work authority:** Claude may run arbitrary shell programs, edit or delete files, create temporary experiments, and access the network with the OS user's authority. The bridge disables normal Claude customizations, MCP/Chrome/slash commands, and session persistence, but this is not an OS sandbox or filesystem containment. A failure, timeout, or cancellation does not roll back edits; inspect actual changes before trusting the answer, retrying, or committing. The bridge does not automatically publish or commit work.
 
-Work mode explicitly selects Claude's `auto` permission mode with the default built-in tool set; organization policy still applies. It does not inherit your personal permission configuration. `--permission-prompts none` means that actions still requiring a permission prompt are denied, not approved or forwarded to OMP. The bridge rejects a terminal result containing permission denials as `permission_denied`; it does not retry with broader permissions. The approved directory is a starting location, not a filesystem fence. Permitted commands can access other local files, credentials, programs, and services. The controlled launch environment and lock govern the bridge's own dispatch, not arbitrary child programs: they do not prevent a permitted shell command from launching another harness, exporting data, or detaching a process. Use work mode only for trusted tasks. Normal customizations remain disabled so repository hooks, plugins, and integrations do not silently enlarge the handoff; include relevant repository instructions in the task prompt.
-
-The `auto` launch profile passed the pinned CLI's credential-free, network-denied compatibility check. TypeScript checking and all nine behavioral tests passed, and an offline approval-boundary check exercised the updated warning. No live auto-mode task or classifier decision was tested; compatibility does not guarantee that a particular action will be permitted.
+Work mode explicitly selects Claude's `auto` permission mode with the default built-in tool set; organization policy still applies. It does not inherit your personal permission configuration. `--permission-prompts none` means that actions still requiring a permission prompt are denied, not approved or forwarded to OMP. The bridge rejects a terminal result containing permission denials as `permission_denied`; it does not retry with broader permissions. The working directory is a starting location, not a filesystem fence. Permitted commands can access other local files, credentials, programs, and services. The controlled launch environment and lock govern the bridge's own dispatch, not arbitrary child programs: they do not prevent a permitted shell command from launching another harness, exporting data, or detaching a process. Use work mode only for trusted tasks. Normal customizations remain disabled so repository hooks, plugins, and integrations do not silently enlarge the handoff; include relevant repository instructions in the task prompt.
 
 **Read-only authority:** the CLI uses restricted mode, Read/Grep/Glob, `dontAsk`, and denials for shell/edit/write/agent/task/web-fetch/web-search/MCP tools. Administrator-managed policy remains trusted. Restricted-mode file confinement is a Claude policy, not an independent OS security boundary. In either mode, use only data you are authorized to send to Claude.
 
-A successful tool response is `{status: "succeeded", cwd, model, mode, answer, limitations}`. Confirm the reported model and assess the answer against the workspace and requirements. A failed response is `{status: "failed", code, message}`; it is not a completed task and changes may remain. The bridge accepts a matching exact model or the same model with a date suffix, and a successful terminal result only. Each call starts a new process; there is no resumed conversation, automatic post-implementation hook, unattended batch mode, or bridge retry. CLI-internal retries may occur within the invocation.
+A successful tool response is `{status: "succeeded", cwd, model, mode, answer, limitations}`. Confirm the reported model and assess the answer against the workspace and requirements. A failed response is `{status: "failed", code, message}`; it is not a completed task and changes may remain. The bridge accepts a matching exact model or the same model with a date suffix, and a successful terminal result only. Each call starts a new process; there is no resumed conversation, automatic post-implementation hook, built-in batch scheduler, or bridge retry. Non-interactive callers may submit tasks sequentially. CLI-internal retries may occur within an invocation.
 
 ### Standalone operator command
 
-From the intended working directory in an interactive terminal:
+From the intended working directory, with or without a terminal:
 
 ```sh
 bun /absolute/path/to/omp-agent-bridge/src/cli.ts task \
@@ -81,7 +77,7 @@ bun /absolute/path/to/omp-agent-bridge/src/cli.ts task \
   --model claude-opus-5-5 --timeout 600
 ```
 
-For a longer or sensitive prompt, use `--prompt-file /path/to/prompt.txt` instead of the positional prompt. Use `--mode read-only` for consultation. Both stdin and stdout must be terminals; type `RUN ONCE` at the approval prompt. A positional prompt appears in the operator CLI process arguments; the prompt file avoids that exposure. The bridge passes the task to Claude over stdin, not Claude's argv.
+For a longer or sensitive prompt, use `--prompt-file /path/to/prompt.txt` instead of the positional prompt. Use `--mode read-only` for consultation. The command does not read confirmation input; stdin may be closed and stdout may be piped. It writes the task result as JSON and exits nonzero on failure. A positional prompt appears in the operator CLI process arguments; the prompt file avoids that exposure. The bridge passes the task to Claude over stdin, not Claude's argv.
 
 ## Policy and lifecycle
 
@@ -100,13 +96,13 @@ Git-diff capture and a findings-only schema made the bridge unusable for general
 | Module | Responsibility |
 | --- | --- |
 | [src/request.ts](src/request.ts) | Generic request validation, explicit authority, model IDs, and canonical working directory |
-| [src/bridge.ts](src/bridge.ts) | Approval, approved configuration identity, supervisor lease, and result validation |
+| [src/bridge.ts](src/bridge.ts) | Dispatch, configuration identity, supervisor lease, and result validation |
 | [src/worker.ts](src/worker.ts) | Lock, revalidation, task prompt, execution, and failure reporting |
 | [src/claude.ts](src/claude.ts) | Launch profiles shared by live execution and the offline compatibility check |
 | [src/config.ts](src/config.ts) | Account/version pin and controlled environment, preserving default versus explicit profile selection |
 | [src/process.ts](src/process.ts) | Bounded pipes, cancellation, deadlines, and process-group termination |
 | [src/result.ts](src/result.ts) | Draft 7 answer schema, complete-result and selected-model checks |
-| [src/extension.ts](src/extension.ts), [src/cli.ts](src/cli.ts) | OMP and interactive operator adapters |
+| [src/extension.ts](src/extension.ts), [src/cli.ts](src/cli.ts) | OMP and standalone operator adapters, including non-interactive execution |
 | [skills/claude-bridge/SKILL.md](skills/claude-bridge/SKILL.md) | Conditional task and review workflow |
 
 ## Hard restrictions and size limits
@@ -118,7 +114,7 @@ These are bridge limits, not promises about model availability, provider context
 | Platform | macOS only; configuration and preflight reject other platforms. |
 | Account | First-party Claude Team subscription login through the official CLI only. Account organization/profile and the exact configured CLI version must still match. |
 | CLI version | Configuration accepts Claude Code 2.1.281 or newer in the 2.1 series, then pins the exact version. A new version requires a deliberate compatibility check and configuration update. |
-| Approval | Fresh interactive confirmation for each invocation, including retries. The OMP adapter refuses when `ctx.hasUI` is false; the standalone command requires terminal input and output. No unattended approval option. |
+| Invocation | No bridge confirmation or terminal requirement. Interactive and non-interactive calls share the same checks. OMP's host tool-access policy still applies to the `exec`-classified tool. |
 | Permissions | Read-only explicitly uses `dontAsk`, restricted mode, and Read/Grep/Glob only. Work explicitly uses `auto` and default built-in tools. Neither mode inherits personal permission settings. Administrator policy still applies. Actions requiring a permission prompt are denied; reported permission denials fail the task. |
 | Customizations | Ordinary Claude customizations, hooks, MCP connections, Chrome integration, slash commands, and session persistence are disabled for the launched CLI. Work-mode shell authority is not a sandbox and can reach other programs and files. |
 | Parallel requests | One active task per local bridge configuration. No bridge retries or automatic task queue. Claude Code may retry internally within an invocation. |
@@ -128,7 +124,7 @@ These are bridge limits, not promises about model availability, provider context
 | Prompt | 1–32,000 JavaScript string-length units after trimming surrounding whitespace. |
 | Standalone prompt file | At most 128,000 bytes before reading; the prompt length limit still applies. |
 | Model ID | At most 120 JavaScript string-length units; must match the versioned `claude-…` ID pattern. No floating aliases. New configurations default to `claude-opus-5-5`. The account must support the requested model. |
-| Execution deadline | Integer from 1 to 1,800 seconds; default 600. The worker allows another 60 seconds for preflight/lifecycle overhead; the parent closes its lease 5 seconds later and force-kills the worker 10 seconds later. Initial approval/preflight time is separate. |
+| Execution deadline | Integer from 1 to 1,800 seconds; default 600. The worker allows another 60 seconds for preflight/lifecycle overhead; the parent closes its lease 5 seconds later and force-kills the worker 10 seconds later. Initial preflight time is separate. |
 | Serialized worker request | At most 200,000 bytes. |
 | Captured execution output | Claude output and supervisor output are each capped at 1,000,000 bytes, combining standard output and diagnostic output. Exceeding a cap fails the task. |
 | Answer | 1–64,000 JavaScript string-length units. |
@@ -137,13 +133,13 @@ These are bridge limits, not promises about model availability, provider context
 
 JavaScript string length counts UTF-16 code units: some characters, including many emoji, count as two units. Byte limits measure encoded data and are separate from string-length limits.
 
-### Why approval and session persistence work this way
+### Non-interactive execution and session persistence
 
-Per-invocation approval is a bridge safety policy, not a claim that Claude Code inherently requires an interactive caller. It ties consent to the displayed task, model, authority, and possible paid-credit charges. A previous approval, Claude's own permission mode, or OMP's general tool approval does not replace it. Consequently, an OMP session without an approval interface cannot use this bridge for delegation.
+Task invocation authorizes immediate bridge dispatch, including possible paid-credit charges. There is no bridge spending gate, per-invocation confirmation, or `--yes` flag. Claude's `auto` permission decisions and OMP's host tool-access policy remain separate controls; unattended use does not bypass either.
 
 `--no-session-persistence` keeps the current bridge stateless and avoids saving a separate resumable Claude transcript. It does not prevent OMP or Anthropic retention. This trades convenient follow-up conversations for explicit, self-contained task context.
 
-Resuming a conversation could be useful, but removing that flag alone would not provide a usable resume feature: the request/result contract currently has no session identifier or resume option. Supporting follow-ups would require explicit session selection and handling of stored context, account/profile identity, permissions, and fresh approval. Session persistence and permission mode are separate choices; neither removes the approval requirement.
+Resuming a conversation could be useful, but removing that flag alone would not provide a usable resume feature: the request/result contract currently has no session identifier or resume option. Supporting follow-ups would require explicit session selection and handling of stored context, account/profile identity, and permissions. Session persistence remains disabled for both interactive and non-interactive tasks.
 
 ## State and recovery
 
@@ -161,9 +157,8 @@ Start a fresh session or reload plugins after the move. A running OMP session ca
 | `subscription_required` / `account_changed` | Resolve the intended Team login/profile in Claude Code. Reconfigure only for an intended, authorized pin change; never copy credentials or substitute an API key. |
 | `version_changed` / `unsupported_version` | Inspect CLI compatibility and run offline checks before re-pinning. Do not bypass the version gate to silence it. |
 | `schema_incompatible` | Investigate CLI/schema compatibility; the check's schema-parser subprocess is credential-free and network-denied. |
-| `approval_required` | Use an interactive session with fresh confirmation; do not bypass headless refusal. |
 | `invalid_request` / `invalid_workspace` | Supply the generic request fields and an existing working directory; old review fields are no longer accepted. |
-| `config_changed` | Configuration changed while approval was pending. Inspect the intended pin, then request fresh approval. |
+| `config_changed` | Configuration changed between parent validation and worker dispatch. Inspect the intended pin before another invocation. |
 | `busy` | Wait for the active task. If a supervisor was force-killed, verify it and its Claude children stopped before authorizing stale-lock removal. |
 | `quota_exhausted` | Stop rather than switch to paid/API capacity or auto-retry; classification is not a guaranteed hard spending limit. |
 | `permission_denied` / `model_mismatch` / `invalid_result` / `delegate_failed` | Inspect policy, actual changes, compatibility, and usage before considering a newly approved attempt. |
@@ -172,6 +167,18 @@ Start a fresh session or reload plugins after the move. A running OMP session ca
 For an upgrade, authorize dependency/config changes, inspect changed OMP/Claude behavior, install locked dependencies, run offline checks, and re-pin only after a compatibility decision. Restart OMP to load updates through the plugin link. Do not change Git authentication/signing or billing settings merely to pass a check or commit. Plugin linking is local and does not publish your checkout.
 
 ## Verification record
+
+### Non-interactive delegation
+
+- Removed the bridge confirmation callback, OMP UI requirement, and standalone terminal requirement. OMP still classifies `claude_task` as an `exec` tool under the host's own access policy.
+- `bun run verify` passed TypeScript checking, eleven behavioral tests, and both credential-free, network-denied Claude compatibility profiles.
+- Regression coverage runs the actual standalone command with piped output and closed stdin, verifies completed work and lock release, and confirms a cancelled headless OMP task does not dispatch work.
+- A separate smoke created a real headless OMP SDK session with host tool access allowed, loaded the extension, and executed `claude_task` through the host's tool wrapper. An isolated executable fixture performed a file transformation; the bridge returned success and released its lock. OS networking was denied and no live model inference was sent.
+- The smoke verified `claude-opus-5-5`, work-mode `auto`, denied permission prompts, and disabled session persistence. This proves unattended dispatch mechanics, not live model availability, auto-mode permission decisions, or billing behavior.
+
+### Historical checks
+
+The following records describe earlier releases, including the former interactive approval gate. Current behavior is documented above; the old `approval_required` result and confirmation workflow have been removed.
 
 The earlier **review-only** bridge was checked on 2026-09-23 with OMP 18.2.11, Claude Code 2.1.281, and Bun 1.3.14. Six behavioral tests and TypeScript checking passed at that time. After two approved attempts exposed a local schema incompatibility, an authorized review found an injected arithmetic defect in a disposable Git fixture; the target remained unchanged. Its severity label was excessive. OMP registered the old `claude_review` tool and discovered its then-named skill; a noninteractive review returned `approval_required`. The paid-credit display did not change during that smoke, which proves neither attribution nor future free usage. Fixtures were removed; no remote repository or package publication was provisioned.
 
@@ -183,7 +190,7 @@ The earlier **review-only** bridge was checked on 2026-09-23 with OMP 18.2.11, C
 - A fresh OMP runtime registered and activated `claude_task`, exposed its generated request schema, and no longer exposed `claude_review`. `omp read skill://claude-bridge` resolved the bundled workflow.
 - The standalone CLI rejected a headless task. In an actual terminal, `--prompt-file`, mode/model/deadline presentation, and declining `RUN ONCE` were exercised; the result was `approval_required` with no inference dispatch.
 
-Repeat local checks with `bun run verify` (`typecheck`, tests, then `check`). `check` requires the matching local configuration/account/version on macOS. The refactor checks above sent no live inference; the later live review is recorded below. Each live invocation needs separate approval; verify its answer and actual workspace effects, then compare `/usage`. An offline check creates ordinary local state; it does not imply zero filesystem effects.
+Repeat local checks with `bun run verify` (`typecheck`, tests, then `check`). `check` requires the matching local configuration/account/version on macOS. The refactor checks above sent no live inference; the later live review is recorded below. Verify live answers against actual workspace effects. An offline check creates ordinary local state; it does not imply zero filesystem effects.
 
 Previously unverified cases include live quota exhaustion, account-switch races, parent-crash/force-kill containment, hostile repository escape resistance, other operating systems, every OMP UI transport, and provider-side cancellation.
 

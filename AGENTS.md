@@ -4,11 +4,6 @@ This plugin delegates scoped tasks to the official Claude Code CLI. Keep subscri
 credentials inside that client; introducing an OMP provider, SDK, or other
 authentication route requires a separate decision.
 
-Treat live inference as potentially billable. Obtain fresh explicit approval
-for each invocation, including another attempt after a failure. An unchanged
-usage balance is not a spending guarantee. Preserve the interactive approval
-gate and headless refusal.
-
 When changing authentication or CLI compatibility, inspect [account selection](src/config.ts)
 and [the offline compatibility check](src/compatibility.ts). Preserve default versus
 explicit profile selection and the OS account environment needed for login.

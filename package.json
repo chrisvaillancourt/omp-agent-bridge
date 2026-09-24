@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Approval-gated Claude Code task delegation from OMP using the official CLI",
+  "description": "Claude Code task delegation from interactive or non-interactive OMP using the official CLI",
   "engines": {
     "bun": ">=1.3.14"
   },

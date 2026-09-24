@@ -52,7 +52,7 @@ test("malformed or absent structured answers and quota failures are not successe
   expectFailure(() => parseResult(1, JSON.stringify({ ...successful, subtype: "error_during_execution", message: "usage limit" }), selectedModel), "quota_exhausted");
 });
 
-test("non-Git task workspaces resolve symlinks before approval", async () => {
+test("non-Git task workspaces resolve symlinks before dispatch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "bridge-task-")); temporary.push(dir);
   const linked = `${dir}-link`; temporary.push(linked);
   await symlink(dir, linked);

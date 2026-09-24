@@ -73,7 +73,7 @@ export async function configure(claudePath: string, profile?: string): Promise<v
 export async function preflight(c: Config): Promise<void> {
   if (process.platform !== "darwin") throw new BridgeError("unsupported_platform", "This integration is currently verified only on macOS.");
   const profile = c.explicitProfile ? c.profile : undefined;
-  if (await cliVersion(c.claude, profile) !== c.claudeVersion) throw new BridgeError("version_changed", "Claude Code changed version. Recheck compatibility, then run configure before approving another task.");
+  if (await cliVersion(c.claude, profile) !== c.claudeVersion) throw new BridgeError("version_changed", "Claude Code changed version. Recheck compatibility, then run configure before another task.");
   const a = await account(c.claude, profile);
   if (a.orgId !== c.organization || await realpath(a.configDirectory) !== c.profile) throw new BridgeError("account_changed", "Claude account/profile changed. No inference was sent.");
 }
