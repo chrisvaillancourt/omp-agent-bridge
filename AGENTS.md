@@ -4,6 +4,16 @@ This plugin delegates scoped tasks to the official Claude Code CLI. Keep subscri
 credentials inside that client; introducing an OMP provider, SDK, or other
 authentication route requires a separate decision.
 
+Preserve interactive and non-interactive delegation without bridge confirmation
+prompts or an included-allowance-only spending gate. Possible paid usage is an
+accepted tradeoff; OMP host policy and Claude permission checks still apply.
+Keep work mode on `auto`, read-only on `dontAsk`, the default model
+`claude-opus-5-5` with per-call overrides, and session persistence disabled.
+Keep automatic bridge retries disabled.
+
+When changing task execution or its public contract, read the
+[operating restrictions and limits](README.md#hard-restrictions-and-size-limits).
+
 When changing authentication or CLI compatibility, inspect [account selection](src/config.ts)
 and [the offline compatibility check](src/compatibility.ts). Preserve default versus
 explicit profile selection and the OS account environment needed for login.
