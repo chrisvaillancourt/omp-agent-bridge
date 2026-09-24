@@ -22,7 +22,7 @@ export async function delegate(cwd: string, input: unknown, confirm: (warning: s
     await preflight(config);
     if (signal?.aborted) throw new BridgeError("cancelled", "Task cancelled before approval.");
     const authority = task.request.mode === "work"
-      ? "WORK: Claude can edit files, run arbitrary commands, access the network, and create temporary experiments as your OS user. Permission checks are bypassed; this is not a sandbox. Files outside this directory and other local credentials may be accessible to its commands. Failed/cancelled tasks can leave changes and external effects; there is no rollback."
+      ? "WORK: Claude can edit files, run commands, access the network, and create temporary experiments as your OS user, subject to Claude's auto permission mode and administrator policy. Actions requiring a permission prompt are denied; this is not a sandbox. Files outside this directory and other local credentials may be accessible to permitted commands. Failed/cancelled tasks can leave changes and external effects; there is no rollback."
       : "READ-ONLY: Read/Grep/Glob only, with Claude restricted-mode file policy. No shell commands or edits; not an independent OS sandbox.";
     if (!await confirm(`${BILLING_WARNING}\n\nDirectory: ${task.cwd}\nModel: ${task.request.model}\nExecution deadline: ${task.request.timeoutSeconds} seconds\n\n${authority}\n\nTask:\n${task.request.prompt}`)) {
       throw new BridgeError("approval_required", "Task was not approved. No inference was sent.");

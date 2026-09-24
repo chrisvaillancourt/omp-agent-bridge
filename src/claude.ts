@@ -5,7 +5,7 @@ import { jsonSchema } from "./result.ts";
 // The same argument builder is exercised by the credential-free offline check.
 export function taskArguments(config: Config, request: Request): string[] {
   const readOnly = request.mode === "read-only";
-  const permissionMode = readOnly ? "dontAsk" : "bypassPermissions";
+  const permissionMode = readOnly ? "dontAsk" : "auto";
   const settings = {
     forceLoginMethod: "claudeai", forceLoginOrgUUID: config.organization,
     availableModels: [request.model], enforceAvailableModels: true,
