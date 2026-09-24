@@ -1,15 +1,17 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { homedir, userInfo } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, isAbsolute } from "node:path";
 import { z } from "zod";
 import { BridgeError, run } from "./process.ts";
+import { modelSchema } from "./request.ts";
 
-export const MODEL = "claude-sonnet-5";
+export const DEFAULT_MODEL = "claude-sonnet-5";
 export const CONFIG_PATH = join(homedir(), ".config", "omp-review-bridge", "config.json");
 const configSchema = z.object({
   version: z.literal(1), claude: z.string().refine(isAbsolute),
   claudeVersion: z.string().regex(/^2\.1\.\d+$/), profile: z.string().refine(isAbsolute),
-  organization: z.uuid(), model: z.literal(MODEL), explicitProfile: z.boolean(),
+  organization: z.uuid(), model: modelSchema, explicitProfile: z.boolean(),
 }).strict();
 export type Config = z.infer<typeof configSchema>;
 const accountSchema = z.object({
@@ -18,15 +20,21 @@ const accountSchema = z.object({
 });
 
 // Never inherit keys, setup tokens, provider/model overrides, proxies, debug
-// exporters, or runtime injection. The official CLI alone reads its login.
-export function childEnvironment(profile?: string): NodeJS.ProcessEnv {
+// exporters, or runtime injection. Work mode inherits executable search paths,
+// not arbitrary environment variables; its shell still has the user's authority.
+export function childEnvironment(profile?: string, work = false): NodeJS.ProcessEnv {
   return {
-    HOME: homedir(), PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8",
+    HOME: homedir(), PATH: work ? (process.env.PATH ?? "").split(":").filter(isAbsolute).concat(["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).join(":") : "/usr/bin:/bin:/usr/sbin:/sbin",
+    LANG: "en_US.UTF-8", TMPDIR: tmpdir(),
     USER: userInfo().username, LOGNAME: userInfo().username,
     ...(profile ? { CLAUDE_CONFIG_DIR: profile } : {}),
     CLAUDE_CODE_SAFE_MODE: "1", ENABLE_CLAUDEAI_MCP_SERVERS: "false",
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   };
+}
+
+export function configDigest(config: Config): string {
+  return createHash("sha256").update(JSON.stringify(config)).digest("hex");
 }
 
 export async function loadConfig(): Promise<Config> {
@@ -57,7 +65,7 @@ export async function configure(claudePath: string, profile?: string): Promise<v
   const claudeVersion = await cliVersion(claude, profile);
   const a = await account(claude, profile);
   // Keep the installation entry point so updates trip the version gate.
-  const c = configSchema.parse({ version: 1, claude: claudePath, claudeVersion, profile: await realpath(a.configDirectory), explicitProfile: profile !== undefined, organization: a.orgId, model: MODEL });
+  const c = configSchema.parse({ version: 1, claude: claudePath, claudeVersion, profile: await realpath(a.configDirectory), explicitProfile: profile !== undefined, organization: a.orgId, model: DEFAULT_MODEL });
   await mkdir(dirname(CONFIG_PATH), { recursive: true, mode: 0o700 });
   await writeFile(CONFIG_PATH, JSON.stringify(c, null, 2) + "\n", { mode: 0o600 });
 }
@@ -65,7 +73,7 @@ export async function configure(claudePath: string, profile?: string): Promise<v
 export async function preflight(c: Config): Promise<void> {
   if (process.platform !== "darwin") throw new BridgeError("unsupported_platform", "This integration is currently verified only on macOS.");
   const profile = c.explicitProfile ? c.profile : undefined;
-  if (await cliVersion(c.claude, profile) !== c.claudeVersion) throw new BridgeError("version_changed", "Claude Code changed version. Recheck compatibility, then run configure before approving another review.");
+  if (await cliVersion(c.claude, profile) !== c.claudeVersion) throw new BridgeError("version_changed", "Claude Code changed version. Recheck compatibility, then run configure before approving another task.");
   const a = await account(c.claude, profile);
   if (a.orgId !== c.organization || await realpath(a.configDirectory) !== c.profile) throw new BridgeError("account_changed", "Claude account/profile changed. No inference was sent.");
 }

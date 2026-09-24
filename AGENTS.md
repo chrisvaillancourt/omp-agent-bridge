@@ -1,23 +1,23 @@
 # Maintenance constraints
 
-This plugin delegates reviews to the official Claude Code CLI. Keep subscription
+This plugin delegates scoped tasks to the official Claude Code CLI. Keep subscription
 credentials inside that client; introducing an OMP provider, SDK, or other
 authentication route requires a separate decision.
 
-Treat live verification as potentially billable. Obtain fresh explicit approval
-for each live invocation, including another attempt after a failure. An unchanged
-usage balance is not a spending guarantee. Preserve the interactive approval gate
-and headless refusal.
+Treat live inference as potentially billable. Obtain fresh explicit approval
+for each invocation, including another attempt after a failure. An unchanged
+usage balance is not a spending guarantee. Preserve the interactive approval
+gate and headless refusal.
 
 When changing authentication or CLI compatibility, inspect [account selection](src/config.ts)
 and [the offline compatibility check](src/compatibility.ts). Preserve default versus
 explicit profile selection and the OS account environment needed for login.
 `--bare` is intentional only in the credential-free, network-denied compatibility
-check—not in subscription-backed reviews.
+check—not in subscription-backed delegation.
 
-When requesting a review or handling its setup prerequisites, read the
-[review workflow](skills/claude-review/SKILL.md). Keep that workflow conditional;
-do not import it into startup context.
+When delegating a task, requesting an independent review, or handling setup
+prerequisites, read the [bridge workflow](skills/claude-bridge/SKILL.md). Keep
+that workflow conditional; do not import it into startup context.
 
 ## Commits
 

@@ -11,7 +11,7 @@ export async function run(
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv; input?: string; signal?: AbortSignal; timeoutMs?: number; maxBytes?: number },
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  if (options.signal?.aborted) throw new BridgeError("cancelled", "Review cancelled.");
+  if (options.signal?.aborted) throw new BridgeError("cancelled", "Task cancelled.");
   const { promise, resolve, reject } = Promise.withResolvers<{ code: number | null; stdout: string; stderr: string }>();
   const child = spawn(executable, args, { cwd: options.cwd, env: options.env, detached: true, stdio: "pipe" });
   let failure: BridgeError | undefined;
@@ -25,8 +25,8 @@ export async function run(
     }
   };
   const stop = (error: BridgeError) => { failure ??= error; kill(); };
-  const abort = () => stop(new BridgeError("cancelled", "Review cancelled."));
-  const timer = setTimeout(() => stop(new BridgeError("timeout", "Review exceeded its wall-clock deadline.")), options.timeoutMs ?? 15_000);
+  const abort = () => stop(new BridgeError("cancelled", "Task cancelled."));
+  const timer = setTimeout(() => stop(new BridgeError("timeout", "Task exceeded its wall-clock deadline.")), options.timeoutMs ?? 15_000);
   const collect = (target: Buffer[]) => (chunk: Buffer) => {
     bytes += chunk.length;
     if (bytes > (options.maxBytes ?? 2_000_000)) stop(new BridgeError("output_limit", "Command output exceeded the bridge limit."));

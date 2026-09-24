@@ -1,18 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseResult } from "../src/result.ts";
-import { MODEL, childEnvironment } from "../src/config.ts";
+import { DEFAULT_MODEL, childEnvironment } from "../src/config.ts";
 import { run } from "../src/process.ts";
-import { captureTarget } from "../src/target.ts";
+import { prepareTask } from "../src/request.ts";
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
 
+const selectedModel = "claude-opus-4-6";
 const successful = {
-  type: "result", subtype: "success", is_error: false, modelUsage: { [MODEL]: {} },
-  structured_output: { summary: "One defect", findings: [{ priority: "P1", title: "Wrong sum", body: "Returns subtraction for positive inputs.", file: "math.ts", line: 1 }], limitations: [] },
+  type: "result", subtype: "success", is_error: false, modelUsage: { [selectedModel]: {} },
+  structured_output: { answer: "The sum is incorrect for positive inputs.", limitations: [] },
 };
 
 function expectFailure(action: () => unknown, code: string) {
@@ -21,47 +22,55 @@ function expectFailure(action: () => unknown, code: string) {
   expect(failure).toMatchObject({ code });
 }
 
-test("a failed or incomplete Claude turn cannot masquerade as findings", () => {
-  expect(parseResult(0, JSON.stringify(successful)).findings[0].priority).toBe("P1");
-  expectFailure(() => parseResult(1, JSON.stringify(successful)), "review_failed");
-  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, subtype: "error_max_turns" })), "review_failed");
-  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, permission_denials: [{ tool_name: "Read" }] })), "permission_denied");
-  expectFailure(() => parseResult(0, JSON.stringify(successful) + "trailing output"), "invalid_result");
+test("a failed or incomplete Claude turn cannot masquerade as an answer", () => {
+  expect(parseResult(0, JSON.stringify(successful), selectedModel).answer).toContain("sum");
+  expectFailure(() => parseResult(1, JSON.stringify(successful), selectedModel), "delegate_failed");
+  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, subtype: "error_max_turns" }), selectedModel), "delegate_failed");
+  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, permission_denials: [{ tool_name: "Read" }] }), selectedModel), "permission_denied");
+  expectFailure(() => parseResult(0, JSON.stringify(successful) + "trailing output", selectedModel), "invalid_result");
 });
 
 test("verbose JSON selects one terminal result, not an earlier or duplicate result", () => {
   const events = [{ type: "system", subtype: "init" }, successful];
-  expect(parseResult(0, JSON.stringify(events)).findings[0].file).toBe("math.ts");
-  expectFailure(() => parseResult(0, JSON.stringify([...events, successful])), "invalid_result");
-  expectFailure(() => parseResult(0, JSON.stringify([...events, { type: "assistant" }])), "invalid_result");
+  expect(parseResult(0, JSON.stringify(events), selectedModel).answer).toBe(successful.structured_output.answer);
+  expectFailure(() => parseResult(0, JSON.stringify([...events, successful]), selectedModel), "invalid_result");
+  expectFailure(() => parseResult(0, JSON.stringify([...events, { type: "assistant" }]), selectedModel), "invalid_result");
 });
 
-test("wrong-model or escaping findings are rejected rather than trusted", () => {
-  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, modelUsage: { "claude-fable-5-1": {} } })), "model_mismatch");
-  const invalid = structuredClone(successful);
-  invalid.structured_output.findings[0].file = "../outside.ts";
-  expectFailure(() => parseResult(0, JSON.stringify(invalid)), "invalid_result");
+test("the reported model must match the selected full model, with an optional date suffix", () => {
+  const dated = { ...successful, modelUsage: { [`${selectedModel}-20260923`]: {} } };
+  expect(parseResult(0, JSON.stringify(dated), selectedModel).answer).toBe(successful.structured_output.answer);
+  expectFailure(() => parseResult(0, JSON.stringify(successful), DEFAULT_MODEL), "model_mismatch");
+  expectFailure(() => parseResult(0, JSON.stringify({
+    ...successful, modelUsage: { [selectedModel]: {}, "claude-sonnet-5": {} },
+  }), selectedModel), "model_mismatch");
 });
 
-test("a real working-tree mutation invalidates the captured review identity", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "review-target-")); temporary.push(dir);
-  const git = async (...args: string[]) => {
-    const r = await run("/usr/bin/git", args, { cwd: dir, env: { ...childEnvironment(), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
-    expect(r.code).toBe(0);
-    return r.stdout.trim();
-  };
-  await git("init", "-b", "main");
-  await writeFile(join(dir, "math.ts"), "export const add = (a, b) => a + b;\n");
-  await git("add", "math.ts");
-  await git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-m", "base");
-  const base = await git("rev-parse", "HEAD");
-  await writeFile(join(dir, "math.ts"), "export const add = (a, b) => a - b;\n");
-  const request = { base, workingTree: true, requirements: "Addition must add." };
-  const first = await captureTarget(dir, request);
-  expect(first.diff).toContain("a - b");
-  await expect(captureTarget(dir, { ...request, workingTree: false })).rejects.toMatchObject({ code: "dirty_target" });
-  await writeFile(join(dir, "math.ts"), "export const add = () => 0;\n");
-  expect((await captureTarget(dir, request)).digest).not.toBe(first.digest);
+test("malformed or absent structured answers and quota failures are not successes", () => {
+  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, structured_output: { limitations: [] } }), selectedModel), "invalid_result");
+  expectFailure(() => parseResult(0, JSON.stringify({ ...successful, structured_output: { answer: "", limitations: [] } }), selectedModel), "invalid_result");
+  expectFailure(() => parseResult(1, JSON.stringify({ ...successful, subtype: "error_during_execution", message: "usage limit" }), selectedModel), "quota_exhausted");
+});
+
+test("non-Git task workspaces resolve symlinks before approval", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bridge-task-")); temporary.push(dir);
+  const linked = `${dir}-link`; temporary.push(linked);
+  await symlink(dir, linked);
+  const prepared = await prepareTask(linked, {
+    prompt: "Inspect this directory.", mode: "read-only", model: selectedModel, timeoutSeconds: 1800,
+  }, DEFAULT_MODEL);
+  expect(prepared.cwd).toBe(await realpath(dir));
+  await expect(prepareTask(join(dir, "missing"), { prompt: "Fix the defect.", mode: "work" }, DEFAULT_MODEL)).rejects.toMatchObject({ code: "invalid_workspace" });
+});
+
+test("task requests reject omitted mode, legacy review fields, model aliases and excessive timeouts", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bridge-task-")); temporary.push(dir);
+  const request = { prompt: "Explain the code.", mode: "work" };
+  await expect(prepareTask(dir, { prompt: request.prompt }, DEFAULT_MODEL)).rejects.toBeDefined();
+  await expect(prepareTask(dir, { ...request, base: "HEAD", workingTree: true, requirements: "Review" }, DEFAULT_MODEL)).rejects.toBeDefined();
+  await expect(prepareTask(dir, { ...request, model: "sonnet" }, DEFAULT_MODEL)).rejects.toBeDefined();
+  await expect(prepareTask(dir, { ...request, model: "claude-opus-4-6[1m]" }, DEFAULT_MODEL)).rejects.toBeDefined();
+  await expect(prepareTask(dir, { ...request, timeoutSeconds: 1801 }, DEFAULT_MODEL)).rejects.toBeDefined();
 });
 
 test("timeout kills descendants, not just the process-group leader", async () => {
